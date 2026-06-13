@@ -297,15 +297,31 @@ export function getContextMessages(
   sessionId: string,
   maxTurns: number,
 ): MessageParam[] {
-  const messages = getRecentMessages(sessionId, maxTurns * 4); // extra buffer for tool messages
-  const result: MessageParam[] = [];
+  // Fetch more than needed to avoid splitting tool_use/tool_result pairs
+  const messages = getRecentMessages(sessionId, maxTurns * 4 + 20);
+  const seenToolUseIds = new Set<string>();
 
+  // First pass: collect all tool_use IDs
+  for (const msg of messages) {
+    if (msg.toolUseJson) {
+      try {
+        const toolUse = JSON.parse(msg.toolUseJson) as ToolUseData;
+        seenToolUseIds.add(toolUse.id);
+      } catch { /* skip */ }
+    }
+  }
+
+  const result: MessageParam[] = [];
   let i = 0;
   while (i < messages.length) {
     const msg = messages[i]!;
 
+    // Skip orphan tool_results (their tool_use was truncated)
     if (msg.role === "user" && msg.toolUseId) {
-      // This is a tool_result message
+      if (!seenToolUseIds.has(msg.toolUseId)) {
+        i++;
+        continue; // drop orphan
+      }
       result.push({
         role: "user",
         content: [
@@ -321,10 +337,8 @@ export function getContextMessages(
     }
 
     if (msg.role === "assistant" && (msg.toolUseJson || msg.thinkingJson)) {
-      // Assistant message with structured content (thinking + optional tool_use)
       const contentBlocks: any[] = [];
 
-      // Thinking blocks must come FIRST, in original order
       if (msg.thinkingJson) {
         try {
           const thinking = JSON.parse(msg.thinkingJson);
@@ -338,12 +352,10 @@ export function getContextMessages(
         } catch { /* skip malformed */ }
       }
 
-      // Text content
       if (msg.content) {
         contentBlocks.push({ type: "text", text: msg.content });
       }
 
-      // Tool use block
       if (msg.toolUseJson) {
         try {
           const toolUse = JSON.parse(msg.toolUseJson) as ToolUseData;
@@ -366,7 +378,6 @@ export function getContextMessages(
     if (msg.role === "user") {
       result.push({ role: "user", content: msg.content });
     } else {
-      // Plain assistant message — check if we should preserve thinking
       if (msg.thinkingJson) {
         try {
           const thinking = JSON.parse(msg.thinkingJson);
@@ -386,6 +397,12 @@ export function getContextMessages(
       }
     }
     i++;
+  }
+
+  // Enforce maxTurns limit on final result (keep last N pairs of user/assistant)
+  const maxMessages = maxTurns * 4 + 10;
+  if (result.length > maxMessages) {
+    return result.slice(result.length - maxMessages);
   }
 
   return result;
