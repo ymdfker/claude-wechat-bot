@@ -399,10 +399,35 @@ export function getContextMessages(
     i++;
   }
 
-  // Enforce maxTurns limit on final result (keep last N pairs of user/assistant)
+  // Enforce maxTurns limit on final result. When truncating from the start,
+  // remove any orphan tool_results whose tool_use was sliced off.
   const maxMessages = maxTurns * 4 + 10;
   if (result.length > maxMessages) {
-    return result.slice(result.length - maxMessages);
+    const sliced = result.slice(result.length - maxMessages);
+    // Collect tool_use IDs present in the sliced array
+    const slicedToolUseIds = new Set<string>();
+    for (const msg of sliced) {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        for (const block of msg.content as any[]) {
+          if (block.type === "tool_use" && block.id) {
+            slicedToolUseIds.add(block.id);
+          }
+        }
+      }
+    }
+    // Filter out orphan tool_results
+    return sliced.filter((msg) => {
+      if (msg.role === "user" && Array.isArray(msg.content)) {
+        for (const block of msg.content as any[]) {
+          if (block.type === "tool_result" && block.tool_use_id) {
+            if (!slicedToolUseIds.has(block.tool_use_id)) {
+              return false; // drop orphan
+            }
+          }
+        }
+      }
+      return true;
+    });
   }
 
   return result;

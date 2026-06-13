@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="50%" stop-color="#e8e4ff" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#c8c0f0" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#d4c8ff"/>
+      <stop offset="100%" stop-color="#7868f0"/>
+    </linearGradient>
+    <linearGradient id="reflection" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="35%" stop-color="#ffffff" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%" stop-color="#7868f0" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#7868f0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="512" height="512" fill="#1a1a2e"/>
+  <rect x="0" y="0" width="512" height="512" fill="url(#glass)"/>
+  <rect x="0" y="0" width="512" height="512" fill="url(#reflection)"/>
+
+  <!-- Glow -->
+  <ellipse cx="256" cy="240" rx="240" ry="220" fill="url(#glow)"/>
+
+  <!-- Geometric "A" -->
+  <g transform="translate(256,220)" fill="none" stroke="url(#accent)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="-160,110 0,-170 160,110"/>
+    <line x1="-90" y1="35" x2="90" y2="35"/>
+  </g>
+
+  <!-- Highlight -->
+  <g transform="translate(256,220)" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.08">
+    <polyline points="-160,110 0,-170 160,110"/>
+    <line x1="-90" y1="35" x2="90" y2="35"/>
+  </g>
+
+  <!-- Tech dots -->
+  <circle cx="64" cy="100" r="5" fill="#d4c8ff" opacity="0.22"/>
+  <circle cx="448" cy="100" r="5" fill="#d4c8ff" opacity="0.22"/>
+
+  <g stroke="#7868f0" stroke-width="1" opacity="0.06">
+    <line x1="64" y1="100" x2="140" y2="150"/>
+    <line x1="448" y1="100" x2="372" y2="150"/>
+  </g>
+
+  <!-- Label — proportional to A -->
+  <text x="256" y="440" text-anchor="middle" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="40" font-weight="500" letter-spacing="10" fill="#c8c0f0" opacity="0.32">CLAUDE</text>
+</svg>

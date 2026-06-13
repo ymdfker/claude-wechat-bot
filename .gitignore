@@ -4,3 +4,4 @@ dist-app/
 data/
 .env
 *.db
+启动Bot.command
