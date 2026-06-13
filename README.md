@@ -15,15 +15,31 @@ Connect Claude (via DeepSeek API) directly to your personal WeChat account. A Ty
 
 ## 📋 Prerequisites
 
+- macOS 13+ (for the desktop app)
 - [Node.js](https://nodejs.org/) >= 22
 - A WeChat account (personal)
 - A [DeepSeek API](https://platform.deepseek.com/) key (or Anthropic API key)
 
 ## 🚀 Quick Start
 
+### Option A: One-click (macOS)
+
+1. Download **Claude-WeChat-Bot.dmg** from [GitHub Releases](https://github.com/ymdfker/claude-wechat-bot/releases/latest)
+2. Mount the DMG and drag the app to **Applications**
+3. Set your API token:
+   ```bash
+   echo 'export ANTHROPIC_AUTH_TOKEN="sk-your-deepsek-key"' >> ~/.zshrc
+   echo 'export ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"' >> ~/.zshrc
+   ```
+4. Double-click **Claude-WeChat-Bot** in Applications to start!
+
+The app opens a Terminal window that auto-installs dependencies and starts the bot.
+
+### Option B: Command Line
+
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/claude-wechat-bot.git
+git clone git@github.com:ymdfker/claude-wechat-bot.git
 cd claude-wechat-bot
 
 # Install dependencies
@@ -35,6 +51,18 @@ export ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"
 
 # Start the bot
 npm run dev
+```
+
+Or use the launcher script:
+```bash
+bash scripts/start.sh
+```
+
+### Option C: Build the app yourself
+
+```bash
+bash scripts/build-installer.sh
+# Outputs dist-app/Claude-WeChat-Bot.app and dist-app/Claude-WeChat-Bot.dmg
 ```
 
 On first run, a QR code will appear in the terminal. Scan it with your WeChat app to log in.
@@ -83,6 +111,9 @@ claude-wechat-bot/
 │   │   ├── manager.ts    # Session manager
 │   │   └── store.ts      # SQLite-based session store
 │   └── tools/            # Tool definitions
+├── scripts/
+│   ├── start.sh          # Terminal launcher script
+│   └── build-installer.sh # macOS .app + .dmg builder
 ├── data/                 # Runtime data (gitignored)
 ├── package.json
 └── tsconfig.json
