@@ -1,7 +1,8 @@
-import Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
+import initSqlJs from "sql.js";
+import type { Database, SqlJsStatic } from "sql.js";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 
 // ---------------------------------------------------------------------------
@@ -28,24 +29,20 @@ export interface ToolUseData {
 export interface ContextMessage {
   id: number;
   role: "user" | "assistant";
-  /** Plain text content (for user messages and plain assistant replies) */
   content: string;
-  /** For tool_result messages: the tool_use_id this result corresponds to */
   toolUseId?: string;
-  /** For tool_result messages: the tool name */
   toolName?: string;
-  /** For assistant tool_use messages: the tool_use block data (JSON) */
   toolUseJson?: string;
-  /** For assistant messages: serialized thinking blocks (JSON array of {thinking, signature}) */
   thinkingJson?: string;
   timestamp: number;
 }
 
 // ---------------------------------------------------------------------------
-// Database setup
+// SQL.js handle (lazy init)
 // ---------------------------------------------------------------------------
 
-let _db: Database.Database | null = null;
+let _db: Database | null = null;
+let _SQL: SqlJsStatic | null = null;
 
 function resolveDbPath(): string {
   const cwdDataDir = path.join(process.cwd(), "data");
@@ -53,14 +50,24 @@ function resolveDbPath(): string {
   return path.join(cwdDataDir, "sessions.db");
 }
 
-function getDb(): Database.Database {
+async function getDb(): Promise<Database> {
   if (_db) return _db;
-  const dbPath = resolveDbPath();
-  _db = new Database(dbPath);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("busy_timeout = 5000");
 
-  _db.exec(`
+  _SQL = await initSqlJs();
+  const dbPath = resolveDbPath();
+
+  // Load existing DB or create new
+  if (fs.existsSync(dbPath)) {
+    const buffer = fs.readFileSync(dbPath);
+    _db = new _SQL.Database(buffer);
+  } else {
+    _db = new _SQL.Database();
+  }
+
+  _db.run("PRAGMA journal_mode = WAL");
+  _db.run("PRAGMA busy_timeout = 5000");
+
+  _db.run(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -70,244 +77,233 @@ function getDb(): Database.Database {
       updated_at INTEGER NOT NULL,
       message_count INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1
-    );
-
+    )
+  `);
+  _db.run(`
     CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
       role TEXT NOT NULL,
       content TEXT NOT NULL DEFAULT '',
       tool_use_id TEXT,
       tool_name TEXT,
       tool_use_json TEXT,
       thinking_json TEXT,
-      timestamp INTEGER NOT NULL,
-      FOREIGN KEY (session_id) REFERENCES sessions(id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-    CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(session_id, timestamp);
-    CREATE INDEX IF NOT EXISTS idx_sessions_wechat ON sessions(wechat_user_id, account_id);
+      timestamp INTEGER NOT NULL
+    )
   `);
 
-  // Migrate: add columns if they don't exist (safe to run repeatedly)
-  for (const col of ["tool_use_json", "thinking_json"]) {
-    try { _db.exec(`ALTER TABLE messages ADD COLUMN ${col} TEXT`); } catch { /* already exists */ }
-  }
+  // Create indexes (safe to run multiple times)
+  try { _db.run("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)"); } catch { /* ok */ }
+  try { _db.run("CREATE INDEX IF NOT EXISTS idx_messages_ts ON messages(session_id, timestamp)"); } catch { /* ok */ }
+  try { _db.run("CREATE INDEX IF NOT EXISTS idx_sessions_wechat ON sessions(wechat_user_id, account_id)"); } catch { /* ok */ }
 
   return _db;
+}
+
+/** Persist SQL.js in-memory DB back to disk. */
+function saveDb(): void {
+  if (!_db) return;
+  const dbPath = resolveDbPath();
+  const data = _db.export();
+  const buffer = Buffer.from(data);
+  fs.writeFileSync(dbPath, buffer);
+}
+
+// ---------------------------------------------------------------------------
+// Query helpers
+// ---------------------------------------------------------------------------
+
+function run(sql: string, params: any[] = []): void {
+  if (!_db) throw new Error("DB not initialized");
+  _db.run(sql, params);
+  saveDb();
+}
+
+function get(sql: string, params: any[] = []): any | null {
+  if (!_db) throw new Error("DB not initialized");
+  const stmt = _db.prepare(sql);
+  stmt.bind(params);
+  if (stmt.step()) {
+    const row = stmt.getAsObject();
+    stmt.free();
+    return row;
+  }
+  stmt.free();
+  return null;
+}
+
+function all(sql: string, params: any[] = []): any[] {
+  if (!_db) throw new Error("DB not initialized");
+  const results: any[] = [];
+  const stmt = _db.prepare(sql);
+  stmt.bind(params);
+  while (stmt.step()) {
+    results.push(stmt.getAsObject());
+  }
+  stmt.free();
+  return results;
 }
 
 // ---------------------------------------------------------------------------
 // Session CRUD
 // ---------------------------------------------------------------------------
 
-export function createSession(params: {
+export async function createSession(params: {
   name?: string;
   wechatUserId: string;
   accountId?: string;
-}): SessionRecord {
-  const db = getDb();
+}): Promise<SessionRecord> {
+  await getDb();
   const id = randomUUID();
   const now = Date.now();
   const name = params.name ?? `Chat-${new Date().toLocaleDateString("zh-CN")}`;
 
   deactivateSessions(params.wechatUserId, params.accountId ?? "");
 
-  db.prepare(
+  run(
     `INSERT INTO sessions (id, name, wechat_user_id, account_id, created_at, updated_at, message_count, is_active)
      VALUES (?, ?, ?, ?, ?, ?, 0, 1)`,
-  ).run(id, name, params.wechatUserId, params.accountId ?? "", now, now);
+    [id, name, params.wechatUserId, params.accountId ?? "", now, now],
+  );
 
   return {
-    id,
-    name,
+    id, name,
     wechatUserId: params.wechatUserId,
     accountId: params.accountId ?? "",
-    createdAt: now,
-    updatedAt: now,
-    messageCount: 0,
-    isActive: true,
+    createdAt: now, updatedAt: now,
+    messageCount: 0, isActive: true,
   };
 }
 
 function deactivateSessions(wechatUserId: string, accountId: string): void {
-  const db = getDb();
-  db.prepare(
+  run(
     `UPDATE sessions SET is_active = 0 WHERE wechat_user_id = ? AND account_id = ?`,
-  ).run(wechatUserId, accountId);
+    [wechatUserId, accountId],
+  );
 }
 
-export function getActiveSession(
-  wechatUserId: string,
-  accountId: string,
-): SessionRecord | null {
-  const db = getDb();
-  const row = db
-    .prepare(
-      `SELECT * FROM sessions
-     WHERE wechat_user_id = ? AND account_id = ? AND is_active = 1
-     ORDER BY updated_at DESC LIMIT 1`,
-    )
-    .get(wechatUserId, accountId) as any;
-
-  if (!row) return null;
-  return rowToSession(row);
+export async function getActiveSession(
+  wechatUserId: string, accountId: string,
+): Promise<SessionRecord | null> {
+  await getDb();
+  const row = get(
+    `SELECT * FROM sessions WHERE wechat_user_id = ? AND account_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1`,
+    [wechatUserId, accountId],
+  );
+  return row ? rowToSession(row) : null;
 }
 
-export function getOrCreateSession(params: {
-  wechatUserId: string;
-  accountId: string;
-}): SessionRecord {
-  const existing = getActiveSession(params.wechatUserId, params.accountId);
+export async function getOrCreateSession(params: {
+  wechatUserId: string; accountId: string;
+}): Promise<SessionRecord> {
+  const existing = await getActiveSession(params.wechatUserId, params.accountId);
   if (existing) return existing;
   return createSession(params);
 }
 
-export function getSession(id: string): SessionRecord | null {
-  const db = getDb();
-  const row = db.prepare(`SELECT * FROM sessions WHERE id = ?`).get(id) as any;
-  if (!row) return null;
-  return rowToSession(row);
+export async function getSession(id: string): Promise<SessionRecord | null> {
+  await getDb();
+  const row = get(`SELECT * FROM sessions WHERE id = ?`, [id]);
+  return row ? rowToSession(row) : null;
 }
 
-export function listSessions(
-  wechatUserId: string,
-  accountId: string,
-): SessionRecord[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT * FROM sessions
-     WHERE wechat_user_id = ? AND account_id = ?
-     ORDER BY updated_at DESC LIMIT 20`,
-    )
-    .all(wechatUserId, accountId) as any[];
+export async function listSessions(
+  wechatUserId: string, accountId: string,
+): Promise<SessionRecord[]> {
+  await getDb();
+  const rows = all(
+    `SELECT * FROM sessions WHERE wechat_user_id = ? AND account_id = ? ORDER BY updated_at DESC LIMIT 20`,
+    [wechatUserId, accountId],
+  );
   return rows.map(rowToSession);
 }
 
-export function switchSession(
-  sessionId: string,
-  wechatUserId: string,
-  accountId: string,
-): SessionRecord | null {
-  const session = getSession(sessionId);
+export async function switchSession(
+  sessionId: string, wechatUserId: string, accountId: string,
+): Promise<SessionRecord | null> {
+  const session = await getSession(sessionId);
   if (!session || session.wechatUserId !== wechatUserId) return null;
 
-  const db = getDb();
   deactivateSessions(wechatUserId, accountId);
-  db.prepare(`UPDATE sessions SET is_active = 1, updated_at = ? WHERE id = ?`).run(
-    Date.now(),
-    sessionId,
-  );
+  run(`UPDATE sessions SET is_active = 1, updated_at = ? WHERE id = ?`, [Date.now(), sessionId]);
   return { ...session, isActive: true };
 }
 
-export function deleteSession(id: string): boolean {
-  const db = getDb();
-  const result = db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id);
-  return result.changes > 0;
+export function deleteSessionSync(id: string): boolean {
+  if (!_db) return false;
+  try {
+    run(`DELETE FROM sessions WHERE id = ?`, [id]);
+    return true;
+  } catch { return false; }
 }
 
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
 
-export function addMessage(params: {
-  sessionId: string;
-  role: "user" | "assistant";
-  content: string;
-  toolUseId?: string;
-  toolName?: string;
-  toolUseJson?: string;
-  thinkingJson?: string;
+function _addMessage(params: {
+  sessionId: string; role: string; content: string;
+  toolUseId?: string; toolName?: string;
+  toolUseJson?: string; thinkingJson?: string;
 }): void {
-  const db = getDb();
-  db.prepare(
+  run(
     `INSERT INTO messages (session_id, role, content, tool_use_id, tool_name, tool_use_json, thinking_json, timestamp)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    params.sessionId,
-    params.role,
-    params.content,
-    params.toolUseId ?? null,
-    params.toolName ?? null,
-    params.toolUseJson ?? null,
-    params.thinkingJson ?? null,
-    Date.now(),
+    [params.sessionId, params.role, params.content,
+     params.toolUseId ?? null, params.toolName ?? null,
+     params.toolUseJson ?? null, params.thinkingJson ?? null, Date.now()],
   );
-  db.prepare(
-    `UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE id = ?`,
-  ).run(Date.now(), params.sessionId);
+  run(`UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE id = ?`,
+    [Date.now(), params.sessionId]);
 }
 
-/** Save an assistant message that includes thinking + optional tool_use block. */
+export function addMessage(params: {
+  sessionId: string; role: "user" | "assistant"; content: string;
+  toolUseId?: string; toolName?: string;
+  toolUseJson?: string; thinkingJson?: string;
+}): void {
+  _addMessage(params);
+}
+
 export function addAssistantWithThinking(params: {
-  sessionId: string;
-  text: string;
+  sessionId: string; text: string;
   thinking?: { thinking: string; signature: string } | null;
   toolUse?: ToolUseData;
 }): void {
-  addMessage({
-    sessionId: params.sessionId,
-    role: "assistant",
-    content: params.text,
+  _addMessage({
+    sessionId: params.sessionId, role: "assistant", content: params.text,
     thinkingJson: params.thinking ? JSON.stringify(params.thinking) : undefined,
     toolUseJson: params.toolUse ? JSON.stringify(params.toolUse) : undefined,
   });
 }
 
-/** Save a tool result (user role with tool_result content). */
 export function addToolResult(params: {
-  sessionId: string;
-  toolUseId: string;
-  toolName: string;
-  result: string;
+  sessionId: string; toolUseId: string; toolName: string; result: string;
 }): void {
-  addMessage({
-    sessionId: params.sessionId,
-    role: "user",
-    content: params.result,
-    toolUseId: params.toolUseId,
-    toolName: params.toolName,
+  _addMessage({
+    sessionId: params.sessionId, role: "user", content: params.result,
+    toolUseId: params.toolUseId, toolName: params.toolName,
   });
 }
 
-export function getRecentMessages(
-  sessionId: string,
-  limit: number,
-): ContextMessage[] {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT * FROM messages
-     WHERE session_id = ?
-     ORDER BY timestamp DESC LIMIT ?`,
-    )
-    .all(sessionId, limit) as any[];
+function getRecentMessages(sessionId: string, limit: number): ContextMessage[] {
+  const rows = all(
+    `SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?`,
+    [sessionId, limit],
+  );
   return rows.reverse().map(rowToContextMessage);
 }
 
-/**
- * Rebuild Anthropic Messages API params from stored conversation history.
- * This properly constructs tool_use and tool_result content blocks so the
- * API doesn't reject tool_result blocks referencing unknown tool_use_ids.
- */
 export function getContextMessages(
-  sessionId: string,
-  maxTurns: number,
+  sessionId: string, maxTurns: number,
 ): MessageParam[] {
-  // Fetch more than needed to avoid splitting tool_use/tool_result pairs
   const messages = getRecentMessages(sessionId, maxTurns * 4 + 20);
   const seenToolUseIds = new Set<string>();
 
-  // First pass: collect all tool_use IDs
   for (const msg of messages) {
     if (msg.toolUseJson) {
-      try {
-        const toolUse = JSON.parse(msg.toolUseJson) as ToolUseData;
-        seenToolUseIds.add(toolUse.id);
-      } catch { /* skip */ }
+      try { seenToolUseIds.add((JSON.parse(msg.toolUseJson) as ToolUseData).id); } catch { /* skip */ }
     }
   }
 
@@ -316,63 +312,36 @@ export function getContextMessages(
   while (i < messages.length) {
     const msg = messages[i]!;
 
-    // Skip orphan tool_results (their tool_use was truncated)
     if (msg.role === "user" && msg.toolUseId) {
-      if (!seenToolUseIds.has(msg.toolUseId)) {
-        i++;
-        continue; // drop orphan
-      }
+      if (!seenToolUseIds.has(msg.toolUseId)) { i++; continue; }
       result.push({
         role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: msg.toolUseId,
-            content: msg.content,
-          },
-        ],
+        content: [{ type: "tool_result", tool_use_id: msg.toolUseId, content: msg.content }],
       });
-      i++;
-      continue;
+      i++; continue;
     }
 
     if (msg.role === "assistant" && (msg.toolUseJson || msg.thinkingJson)) {
-      const contentBlocks: any[] = [];
-
+      const blocks: any[] = [];
       if (msg.thinkingJson) {
         try {
-          const thinking = JSON.parse(msg.thinkingJson);
-          if (Array.isArray(thinking)) {
-            for (const t of thinking) {
-              contentBlocks.push({ type: "thinking", thinking: t.thinking, signature: t.signature });
-            }
+          const t = JSON.parse(msg.thinkingJson);
+          if (Array.isArray(t)) {
+            for (const b of t) blocks.push({ type: "thinking", thinking: b.thinking, signature: b.signature });
           } else {
-            contentBlocks.push({ type: "thinking", thinking: thinking.thinking, signature: thinking.signature });
+            blocks.push({ type: "thinking", thinking: t.thinking, signature: t.signature });
           }
-        } catch { /* skip malformed */ }
+        } catch { /* skip */ }
       }
-
-      if (msg.content) {
-        contentBlocks.push({ type: "text", text: msg.content });
-      }
-
+      if (msg.content) blocks.push({ type: "text", text: msg.content });
       if (msg.toolUseJson) {
         try {
-          const toolUse = JSON.parse(msg.toolUseJson) as ToolUseData;
-          contentBlocks.push({
-            type: "tool_use",
-            id: toolUse.id,
-            name: toolUse.name,
-            input: toolUse.input,
-          });
-        } catch { /* skip malformed */ }
+          const tu = JSON.parse(msg.toolUseJson) as ToolUseData;
+          blocks.push({ type: "tool_use", id: tu.id, name: tu.name, input: tu.input });
+        } catch { /* skip */ }
       }
-
-      if (contentBlocks.length > 0) {
-        result.push({ role: "assistant", content: contentBlocks });
-      }
-      i++;
-      continue;
+      if (blocks.length > 0) result.push({ role: "assistant", content: blocks });
+      i++; continue;
     }
 
     if (msg.role === "user") {
@@ -380,12 +349,12 @@ export function getContextMessages(
     } else {
       if (msg.thinkingJson) {
         try {
-          const thinking = JSON.parse(msg.thinkingJson);
+          const t = JSON.parse(msg.thinkingJson);
           const blocks: any[] = [];
-          if (Array.isArray(thinking)) {
-            for (const t of thinking) blocks.push({ type: "thinking", thinking: t.thinking, signature: t.signature });
+          if (Array.isArray(t)) {
+            for (const b of t) blocks.push({ type: "thinking", thinking: b.thinking, signature: b.signature });
           } else {
-            blocks.push({ type: "thinking", thinking: thinking.thinking, signature: thinking.signature });
+            blocks.push({ type: "thinking", thinking: t.thinking, signature: t.signature });
           }
           blocks.push({ type: "text", text: msg.content });
           result.push({ role: "assistant", content: blocks });
@@ -399,31 +368,22 @@ export function getContextMessages(
     i++;
   }
 
-  // Enforce maxTurns limit on final result. When truncating from the start,
-  // remove any orphan tool_results whose tool_use was sliced off.
-  const maxMessages = maxTurns * 4 + 10;
-  if (result.length > maxMessages) {
-    const sliced = result.slice(result.length - maxMessages);
-    // Collect tool_use IDs present in the sliced array
-    const slicedToolUseIds = new Set<string>();
-    for (const msg of sliced) {
-      if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        for (const block of msg.content as any[]) {
-          if (block.type === "tool_use" && block.id) {
-            slicedToolUseIds.add(block.id);
-          }
+  // Enforce limit, filter orphans
+  const maxMsgs = maxTurns * 4 + 10;
+  if (result.length > maxMsgs) {
+    const sliced = result.slice(result.length - maxMsgs);
+    const slicedIds = new Set<string>();
+    for (const m of sliced) {
+      if (m.role === "assistant" && Array.isArray(m.content)) {
+        for (const b of m.content as any[]) {
+          if (b.type === "tool_use" && b.id) slicedIds.add(b.id);
         }
       }
     }
-    // Filter out orphan tool_results
-    return sliced.filter((msg) => {
-      if (msg.role === "user" && Array.isArray(msg.content)) {
-        for (const block of msg.content as any[]) {
-          if (block.type === "tool_result" && block.tool_use_id) {
-            if (!slicedToolUseIds.has(block.tool_use_id)) {
-              return false; // drop orphan
-            }
-          }
+    return sliced.filter(m => {
+      if (m.role === "user" && Array.isArray(m.content)) {
+        for (const b of m.content as any[]) {
+          if (b.type === "tool_result" && b.tool_use_id && !slicedIds.has(b.tool_use_id)) return false;
         }
       }
       return true;
@@ -434,42 +394,31 @@ export function getContextMessages(
 }
 
 export function clearMessages(sessionId: string): void {
-  const db = getDb();
-  db.prepare(`DELETE FROM messages WHERE session_id = ?`).run(sessionId);
-  db.prepare(
-    `UPDATE sessions SET message_count = 0, updated_at = ? WHERE id = ?`,
-  ).run(Date.now(), sessionId);
+  run(`DELETE FROM messages WHERE session_id = ?`, [sessionId]);
+  run(`UPDATE sessions SET message_count = 0, updated_at = ? WHERE id = ?`, [Date.now(), sessionId]);
 }
 
 export function getMessageCount(sessionId: string): number {
-  const db = getDb();
-  const row = db
-    .prepare(`SELECT COUNT(*) as count FROM messages WHERE session_id = ?`)
-    .get(sessionId) as any;
-  return row?.count ?? 0;
+  const row = get(`SELECT COUNT(*) as count FROM messages WHERE session_id = ?`, [sessionId]);
+  return (row as any)?.count ?? 0;
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Sync helpers
 // ---------------------------------------------------------------------------
 
 function rowToSession(row: any): SessionRecord {
   return {
-    id: row.id,
-    name: row.name,
-    wechatUserId: row.wechat_user_id,
-    accountId: row.account_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    messageCount: row.message_count,
-    isActive: Boolean(row.is_active),
+    id: row.id, name: row.name,
+    wechatUserId: row.wechat_user_id, accountId: row.account_id,
+    createdAt: row.created_at, updatedAt: row.updated_at,
+    messageCount: row.message_count, isActive: Boolean(row.is_active),
   };
 }
 
 function rowToContextMessage(row: any): ContextMessage {
   return {
-    id: row.id,
-    role: row.role as "user" | "assistant",
+    id: row.id, role: row.role,
     content: row.content ?? "",
     toolUseId: row.tool_use_id ?? undefined,
     toolName: row.tool_name ?? undefined,
@@ -479,10 +428,15 @@ function rowToContextMessage(row: any): ContextMessage {
   };
 }
 
-/** Close the database connection gracefully. */
 export function closeStore(): void {
   if (_db) {
+    saveDb();
     _db.close();
     _db = null;
   }
+}
+
+/** Initialize the DB eagerly (call at startup). */
+export async function initStore(): Promise<void> {
+  await getDb();
 }

@@ -7,7 +7,7 @@ import { parseCommand, isSlashCommand } from "./commands/parser.js";
 import { handleCommand } from "./commands/handlers.js";
 import { callClaude, streamClaude, assistantMessage } from "./claude/client.js";
 import { permissionGuard } from "./permissions/guard.js";
-import { CronScheduler, createCronJob, listCronJobs, deleteCronJob, formatCronJob, parseNaturalSchedule, type CronJob } from "./cron/scheduler.js";
+import { CronScheduler, createCronJob, listCronJobs, deleteCronJobSync, formatCronJob, parseNaturalSchedule, type CronJob } from "./cron/scheduler.js";
 import type { Tool } from "@anthropic-ai/sdk/resources/messages";
 
 // ---------------------------------------------------------------------------
@@ -204,7 +204,7 @@ export class ClaudeWechatBot {
     await msg.sendTyping();
 
     // Build conversation context
-    const { messages, sessionId } = sessionManager.buildMessages(
+    const { messages, sessionId } = await sessionManager.buildMessages(
       wechatUserId,
       accountId,
       text,
@@ -325,7 +325,7 @@ export class ClaudeWechatBot {
     fs.writeFileSync(tmpPath, media.buffer);
 
     // Save user message placeholder for session context
-    const { sessionId } = sessionManager.buildMessages(wechatUserId, accountId, "");
+    const { sessionId } = await sessionManager.buildMessages(wechatUserId, accountId, "");
     sessionManager.saveUserMessage(sessionId,
       `[用户发送了${displayType}: ${filename}, ${(sizeBytes / 1024).toFixed(1)}KB, 已保存到 ${tmpPath}]`);
 
@@ -733,15 +733,13 @@ export class ClaudeWechatBot {
 
     try {
       // Build messages for the cron prompt
-      const { messages } = sessionManager.buildMessages(
+      const { messages } = await sessionManager.buildMessages(
         job.wechatUserId,
         job.accountId,
         job.prompt,
       );
-      sessionManager.saveUserMessage(
-        sessionManager.resolve(job.wechatUserId, job.accountId).sessionId,
-        job.prompt,
-      );
+      const ctx = await sessionManager.resolve(job.wechatUserId, job.accountId);
+      sessionManager.saveUserMessage(ctx.sessionId, job.prompt);
 
       const response = await callClaude({ messages, maxTokens: 2048 });
       const reply = response.text.trim();
@@ -749,10 +747,8 @@ export class ClaudeWechatBot {
       if (reply) {
         // Use wx-clawbot's sendText to deliver to the WeChat user
         await this.bot.sendText(reply);
-        sessionManager.saveAssistantMessage(
-          sessionManager.resolve(job.wechatUserId, job.accountId).sessionId,
-          reply,
-        );
+        const ctx2 = await sessionManager.resolve(job.wechatUserId, job.accountId);
+        sessionManager.saveAssistantMessage(ctx2.sessionId, reply);
       }
     } catch (err: any) {
       console.error(`Cron job ${job.name} failed:`, err);
@@ -774,7 +770,7 @@ export class ClaudeWechatBot {
     accountId: string,
   ): Promise<string> {
     if (!args) {
-      const jobs = listCronJobs(wechatUserId);
+      const jobs = await listCronJobs(wechatUserId);
       if (jobs.length === 0) {
         return [
           "⏰ No cron jobs configured.",
@@ -797,11 +793,11 @@ export class ClaudeWechatBot {
     // Delete command
     if (args.startsWith("delete ")) {
       const idx = parseInt(args.replace("delete ", "").trim(), 10);
-      const jobs = listCronJobs(wechatUserId);
+      const jobs = await listCronJobs(wechatUserId);
       if (isNaN(idx) || !jobs[idx]) {
         return "Invalid job index. Use /cron to see the list.";
       }
-      deleteCronJob(jobs[idx]!.id);
+      deleteCronJobSync(jobs[idx]!.id);
       return `🗑 Deleted cron job: ${jobs[idx]!.name}`;
     }
 
@@ -836,7 +832,7 @@ export class ClaudeWechatBot {
       description = scheduleRaw;
     }
 
-    const job = createCronJob({
+    const job = await createCronJob({
       name: prompt.slice(0, 50),
       cronExpression,
       prompt,

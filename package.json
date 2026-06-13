@@ -12,12 +12,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "better-sqlite3": "^11.7.0",
+    "sql.js": "^1.14.1",
     "wx-clawbot": "^0.0.18"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
+    "@types/sql.js": "^1.4.11",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   },
