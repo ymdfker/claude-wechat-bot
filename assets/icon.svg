@@ -1,62 +1,51 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <!-- Claude orange gradient -->
-    <radialGradient id="claudeBg" cx="0.4" cy="0.35" r="0.65">
+    <radialGradient id="claude" cx="0.4" cy="0.35" r="0.7">
       <stop offset="0%" stop-color="#ffaa55"/>
-      <stop offset="60%" stop-color="#f97316"/>
+      <stop offset="55%" stop-color="#f97316"/>
       <stop offset="100%" stop-color="#c2410c"/>
     </radialGradient>
-    <!-- WeChat green -->
-    <radialGradient id="wechatGreen" cx="0.35" cy="0.3" r="0.65">
+    <radialGradient id="wechat" cx="0.35" cy="0.3" r="0.65">
       <stop offset="0%" stop-color="#3edb74"/>
       <stop offset="100%" stop-color="#0e9e3e"/>
     </radialGradient>
-    <!-- Glass overlay -->
     <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.2"/>
-      <stop offset="40%" stop-color="#ffffff" stop-opacity="0.04"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.08"/>
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.06"/>
     </linearGradient>
-    <!-- Star element glow -->
-    <radialGradient id="starGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
     <filter id="shadow">
-      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.25"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.2"/>
     </filter>
   </defs>
 
-  <!-- Claude orange circle fills canvas -->
-  <circle cx="256" cy="256" r="256" fill="url(#claudeBg)"/>
+  <!-- Claude orange fills ENTIRE canvas — no border, no gap -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#claude)"/>
 
-  <!-- Faint large star pattern (background texture) -->
-  <g transform="translate(256,256)" opacity="0.08">
-    <path d="M0,-200 L25,-75 L155,-75 L40,25 L80,160 L0,80 L-80,160 L-40,25 L-155,-75 L-25,-75 Z" fill="#ffffff"/>
+  <!-- Subtle large star watermark -->
+  <g transform="translate(256,256)" opacity="0.06">
+    <path d="M0,-220 L28,-83 L170,-83 L45,28 L90,178 L0,86 L-90,178 L-45,28 L-170,-83 L-28,-83 Z" fill="#fff"/>
   </g>
 
-  <!-- Glass overlay for depth -->
-  <circle cx="256" cy="256" r="256" fill="url(#glass)"/>
+  <!-- Glass overlay -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#glass)"/>
 
-  <!-- ====== WeChat bubble centered inside ====== -->
+  <!-- WeChat bubble centered -->
   <g filter="url(#shadow)">
-    <rect x="110" y="120" width="292" height="272" rx="52" ry="52" fill="url(#wechatGreen)"/>
+    <rect x="120" y="118" width="272" height="276" rx="48" ry="48" fill="url(#wechat)"/>
   </g>
 
   <!-- Bubble tail -->
-  <path d="M 158 392 L 134 454 L 190 400 Q 170 388 158 392 Z" fill="#0e9e3e" filter="url(#shadow)"/>
+  <path d="M 168 394 L 140 460 L 198 402 Q 180 392 168 394 Z" fill="#0e9e3e"/>
 
-  <!-- Inner glow for bubble -->
-  <ellipse cx="220" cy="180" rx="70" ry="50" fill="url(#starGlow)"/>
-
-  <!-- Chat indicator lines inside bubble -->
-  <g transform="translate(256,250)">
-    <!-- Small Claude star inside the chat -->
-    <circle cx="0" cy="-38" r="24" fill="#f97316" opacity="0.9"/>
-    <path d="M0,-50 L4,-36 L18,-36 L7,-28 L11,-16 L0,-22 L-11,-16 L-7,-28 L-18,-36 L-4,-36 Z"
-          fill="#ffffff" transform="scale(0.7)"/>
-    <!-- Chat bar -->
-    <rect x="-60" y="16" width="120" height="10" rx="5" fill="#ffffff" opacity="0.7"/>
-    <rect x="-40" y="36" width="80" height="10" rx="5" fill="#ffffff" opacity="0.4"/>
+  <!-- Chat content inside bubble -->
+  <g transform="translate(256,248)">
+    <!-- Claude mini star -->
+    <circle cx="0" cy="-42" r="26" fill="#f97316"/>
+    <path d="M0,-54 L5,-40 L19,-40 L7,-32 L12,-18 L0,-24 L-12,-18 L-7,-32 L-19,-40 L-5,-40 Z"
+          fill="#ffffff" transform="scale(0.65)"/>
+    <!-- Chat bars -->
+    <rect x="-52" y="10" width="104" height="10" rx="5" fill="#ffffff" opacity="0.75"/>
+    <rect x="-36" y="28" width="72" height="10" rx="5" fill="#ffffff" opacity="0.45"/>
   </g>
 </svg>
