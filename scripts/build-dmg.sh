@@ -69,9 +69,19 @@ cat > "$APP_BUNDLE/Contents/MacOS/launcher.sh" << 'EOF'
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 NODE="$DIR/MacOS/node"
 PROJ="$DIR/Resources/project"
+LOCK="/tmp/claude-wechat-bot.lock"
 cd "$PROJ" || exit 1
 
 export SQL_JS_WASM_PATH="$DIR/Resources/sql-wasm.wasm"
+
+# Single-instance guard: check if another instance is already running
+if [ -f "$LOCK" ]; then
+  EXISTING_PID=$(cat "$LOCK" 2>/dev/null)
+  if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
+    osascript -e 'display dialog "Claude-WeChat Bot is already running.\n\nOnly one instance can run at a time." buttons {"OK"} default button "OK" with icon caution with title "Already Running"' 2>/dev/null
+    exit 1
+  fi
+fi
 
 # Fork node process to background so the launcher exits immediately.
 # This stops the Dock icon from bouncing after the initial launch.
