@@ -1,269 +1,104 @@
-#!/usr/bin/env python3
-"""Generate a geeky AI-styled icon for Claude-WeChat-Bot."""
+"""Generate a 1024x1024 PNG icon with rounded corners and transparency."""
+from PIL import Image, ImageDraw, ImageFilter
+import math, os
 
-from PIL import Image, ImageDraw, ImageFilter, ImageChops, ImageOps
-import math
-import os
-import subprocess
-import shutil
+S = 1024
+R = S * 112 // 512  # corner radius (macOS squircle ~22%)
 
-# ── Config ──────────────────────────────────────
-SIZE = 1024
-OUTPUT_ICNS = "/tmp/AppIcon.icns"
-ICONSET = "/tmp/bot.iconset"
+# Create RGBA image (fully transparent)
+img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
 
-# Colors (dark tech palette)
-BG_DARK = (18, 18, 28, 255)
-BG_MID = (30, 30, 48, 255)
-PURPLE = (138, 43, 226, 255)      # BlueViolet
-CYAN = (0, 255, 255, 255)          # Cyan
-MAGENTA = (255, 0, 128, 255)       # Hot pink
-GOLD = (255, 200, 50, 255)         # Warm accent
-WHITE_DIM = (200, 200, 230, 255)
-DARK_BG = (10, 10, 20, 255)
+# Helper: check if (cx, cy) is inside the rounded rect
+def inside_rounded_rect(x, y):
+    if x < R and y < R and (x-R)**2 + (y-R)**2 > R**2:
+        return False
+    if x >= S-R and y < R and (x-(S-R))**2 + (y-R)**2 > R**2:
+        return False
+    if x < R and y >= S-R and (x-R)**2 + (y-(S-R))**2 > R**2:
+        return False
+    if x >= S-R and y >= S-R and (x-(S-R))**2 + (y-(S-R))**2 > R**2:
+        return False
+    return True
 
-def create_icon(size):
-    """Create the icon at given size."""
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    
-    cx, cy = size // 2, size // 2
-    r_base = size // 2 - size // 40  # Slightly smaller for safety
-    
-    # ── 1. Rounded rectangle base mask ──────────
-    mask = Image.new("L", (size, size), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    corner = size // 5
-    mask_draw.rounded_rectangle(
-        [(0, 0), (size - 1, size - 1)],
-        radius=corner,
-        fill=255
-    )
-    
-    # ── 2. Background gradient ──────────────────
-    bg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    bg_draw = ImageDraw.Draw(bg)
-    
-    # Dark indigo gradient top-left to bottom-right
-    for y in range(size):
-        for x in range(size):
-            t = (x + y) / (2 * size)
-            # Deep purple to dark navy
-            r = int(18 + (138 - 18) * t * 0.3)
-            g = int(18 + (43 - 18) * t * 0.2)
-            b = int(28 + (100 - 28) * t * 0.5)
-            bg_draw.point((x, y), (r, g, b, 255))
-    
-    bg = Image.composite(bg, Image.new("RGBA", (size, size), (0,0,0,0)), mask)
-    
-    # ── 3. Neural network pattern ───────────────
-    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    ov_draw = ImageDraw.Draw(overlay)
-    
-    # Nodes positions (neural network layout)
-    margin = size // 5
-    spacing = (size - 2 * margin) // 3
-    
-    nodes = []
-    layers = [3, 4, 4, 3]  # Input -> Hidden -> Hidden -> Output
-    
-    for layer_idx, num_nodes in enumerate(layers):
-        x = margin + layer_idx * spacing
-        for node_idx in range(num_nodes):
-            y = margin + node_idx * ((size - 2 * margin) // max(num_nodes - 1, 1))
-            if num_nodes == 1:
-                y = cy
-            # Add slight randomness
-            jitter_x = ((hash(f"{layer_idx}-{node_idx}-x") % 100) - 50) / 200
-            jitter_y = ((hash(f"{layer_idx}-{node_idx}-y") % 100) - 50) / 200
-            nodes.append((x + jitter_x * spacing * 0.15, y + jitter_y * spacing * 0.15, layer_idx))
-    
-    # Draw connections (synapses) with glow
-    for i, (x1, y1, l1) in enumerate(nodes):
-        for j, (x2, y2, l2) in enumerate(nodes):
-            if l2 == l1 + 1:
-                # Gradient line from purple to cyan
-                alpha = 120
-                for step in range(8):
-                    t = step / 7
-                    px = int(x1 + (x2 - x1) * t)
-                    py = int(y1 + (y2 - y1) * t)
-                    # Color shift from purple to cyan
-                    r = int(PURPLE[0] + (CYAN[0] - PURPLE[0]) * t)
-                    g = int(PURPLE[1] + (CYAN[1] - PURPLE[1]) * t)
-                    b = int(PURPLE[2] + (CYAN[2] - PURPLE[2]) * t)
-                    d = 3
-                    ov_draw.ellipse(
-                        [(px - d, py - d), (px + d, py + d)],
-                        fill=(r, g, b, alpha)
-                    )
-    
-    # Draw nodes
-    for x, y, layer in nodes:
-        if layer == 0:
-            color = CYAN
-            radius = size // 35
-        elif layer == len(layers) - 1:
-            color = MAGENTA
-            radius = size // 35
-        else:
-            color = PURPLE
-            radius = size // 40
-        
-        # Outer glow
-        for g in range(3, 0, -1):
-            gr = radius + g * size // 100
-            alpha_g = 80 // (g + 1)
-            ov_draw.ellipse(
-                [(x - gr, y - gr), (x + gr, y + gr)],
-                fill=(color[0], color[1], color[2], alpha_g)
-            )
-        
-        # Core node
-        ov_draw.ellipse(
-            [(x - radius, y - radius), (x + radius, y + radius)],
-            fill=(*color[:3], 230)
-        )
-        # White center
-        inner_r = radius // 2
-        ov_draw.ellipse(
-            [(x - inner_r, y - inner_r), (x + inner_r, y + inner_r)],
-            fill=(255, 255, 255, 200)
-        )
-    
-    # ── 4. Central holographic ring ──────────────
-    ring = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    ring_draw = ImageDraw.Draw(ring)
-    
-    # Concentric arcs
-    for r_ring in [size // 5, size // 4, size // 3]:
-        for angle in range(0, 360, 2):
-            rad = math.radians(angle)
-            px = cx + r_ring * math.cos(rad)
-            py = cy + r_ring * math.sin(rad)
-            # Pulsing opacity
-            alpha = int(40 + 30 * math.sin(angle * 0.1))
-            ring_draw.point((px, py), (*CYAN[:3], alpha))
-    
-    overlay = Image.alpha_composite(overlay, ring)
-    
-    # ── 5. "AI" text in center ──────────────────
-    # We'll use geometric shapes to form AI
-    text_layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    text_draw = ImageDraw.Draw(text_layer)
-    
-    # Stylized "AI" geometric representation
-    # A-shape: triangle with crossbar
-    a_top = (cx, cy - size // 6)
-    a_left = (cx - size // 8, cy + size // 10)
-    a_right = (cx + size // 8, cy + size // 10)
-    # A legs
-    text_draw.line([a_top, a_left], fill=(*CYAN[:3], 200), width=size//60)
-    text_draw.line([a_top, a_right], fill=(*MAGENTA[:3], 200), width=size//60)
-    # A crossbar
-    cross_y = cy - size // 30
-    text_draw.line(
-        [(cx - size // 18, cross_y), (cx + size // 18, cross_y)],
-        fill=(*GOLD[:3], 180),
-        width=size//70
-    )
-    
-    # I: vertical bar next to A
-    i_x = cx + size // 5
-    text_draw.line(
-        [(i_x, cy - size // 8), (i_x, cy + size // 8)],
-        fill=(*CYAN[:3], 200),
-        width=size//60
-    )
-    # I top dot
-    dot_r = size // 40
-    text_draw.ellipse(
-        [(i_x - dot_r, cy - size // 6 - dot_r), (i_x + dot_r, cy - size // 6 + dot_r)],
-        fill=(*MAGENTA[:3], 220)
-    )
-    
-    overlay = Image.alpha_composite(overlay, text_layer)
-    
-    # ── 6. Corner accents ───────────────────────
-    acc = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    acc_draw = ImageDraw.Draw(acc)
-    acc_m = size // 15
-    
-    # Four corner brackets
-    corners = [
-        (acc_m, acc_m, 1, 1),           # top-left
-        (size - acc_m, acc_m, -1, 1),   # top-right
-        (acc_m, size - acc_m, 1, -1),   # bottom-left
-        (size - acc_m, size - acc_m, -1, -1),  # bottom-right
-    ]
-    
-    for x0, y0, dx, dy in corners:
-        length = size // 10
-        w = size // 70
-        # Horizontal
-        acc_draw.rectangle(
-            [(x0, y0), (x0 + dx * length, y0 + dy * w)],
-            fill=(*CYAN[:3], 180)
-        )
-        # Vertical
-        acc_draw.rectangle(
-            [(x0, y0), (x0 + dx * w, y0 + dy * length)],
-            fill=(*CYAN[:3], 180)
-        )
-    
-    overlay = Image.alpha_composite(overlay, acc)
-    
-    # ── 7. Particle dots (sparse) ───────────────
-    particle_layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    p_draw = ImageDraw.Draw(particle_layer)
-    
-    import random
-    random.seed(42)
-    for _ in range(size // 8):
-        px = random.randint(margin, size - margin)
-        py = random.randint(margin, size - margin)
-        pr = random.randint(1, 3)
-        alpha = random.randint(30, 120)
-        color_choice = random.choice([CYAN, PURPLE, MAGENTA, GOLD])
-        p_draw.ellipse(
-            [(px - pr, py - pr), (px + pr, py + pr)],
-            fill=(*color_choice[:3], alpha)
-        )
-    
-    overlay = Image.alpha_composite(overlay, particle_layer)
-    
-    # ── 8. Composite with background ────────────
-    final = Image.alpha_composite(bg, overlay)
-    
-    # Apply mask for rounded corners
-    final = Image.composite(final, Image.new("RGBA", (size, size), (0,0,0,0)), mask)
-    
-    return final
+# --- Claude orange gradient background ---
+cx_light, cy_light = S * 0.35, S * 0.30
+for y in range(S):
+    for x in range(S):
+        if not inside_rounded_rect(x, y):
+            continue
+        dx = (x - cx_light) / (S * 0.7)
+        dy = (y - cy_light) / (S * 0.7)
+        d = min(math.sqrt(dx*dx + dy*dy), 1.0)
+        r = int(255 - 140 * d)
+        g = max(int(153 - 135 * d), 20)
+        b = max(int(68 - 58 * d), 10)
+        img.putpixel((x, y), (r, g, b, 255))
 
+# --- Glass highlight overlay ---
+for y in range(S):
+    t = y / S
+    # Glass: bright at top, subtle in middle, dark at bottom
+    glass = 0.20 * (1 - t) + 0.04 * (1 - abs(t - 0.42) * 2.5) - 0.10 * t
+    alpha = max(0, int(glass * 255))
+    if alpha == 0:
+        continue
+    for x in range(S):
+        _, _, _, a = img.getpixel((x, y))
+        if a > 0:
+            r, g, b, _ = img.getpixel((x, y))
+            img.putpixel((x, y), (min(255, r + alpha), min(255, g + alpha), min(255, b + alpha), 255))
 
-# ── Main ──────────────────────────────────────
-print("🎨 Generating AI-geek icon...")
+# --- Claude white star (centered, upper area) ---
+star_cx, star_cy = S // 2, int(S * 224 / 512)
+star_r = int(S * 58 / 512)
+points = []
+for i in range(10):
+    angle = math.pi / 2 + i * math.pi / 5
+    r = star_r if i % 2 == 0 else star_r * 0.38
+    points.append((star_cx + r * math.cos(angle), star_cy - r * math.sin(angle)))
 
-# Clean
-if os.path.exists(ICONSET):
-    shutil.rmtree(ICONSET)
-os.makedirs(ICONSET)
+star_layer = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+star_draw = ImageDraw.Draw(star_layer)
+star_draw.polygon(points, fill=(255, 255, 255, int(255 * 0.88)))
+img = Image.alpha_composite(img, star_layer)
 
-# Generate all sizes
-for s in [16, 32, 64, 128, 256, 512, 1024]:
-    icon = create_icon(s)
-    icon.save(f"{ICONSET}/icon_{s}x{s}.png")
-    print(f"  ✅ {s}x{s}")
-    
-    s2 = s * 2
-    if s2 <= 1024:
-        icon2 = create_icon(s2)
-        icon2.save(f"{ICONSET}/icon_{s}x{s}@2x.png")
-        print(f"  ✅ {s}x{s}@2x")
+# --- WeChat green bubble (lower-right) ---
+bx, by = int(S * 314 / 512), int(S * 314 / 512)
+br = int(S * 70 / 512)
 
-# Create ICNS
-subprocess.run(["iconutil", "-c", "icns", ICONSET, "-o", OUTPUT_ICNS], check=True)
-shutil.rmtree(ICONSET)
+# Shadow
+shadow = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+sd = ImageDraw.Draw(shadow)
+sd.ellipse([bx - br + 4, by - br + 4, bx + br + 4, by + br + 4],
+           fill=(10, 90, 30, 60))
+shadow = shadow.filter(ImageFilter.GaussianBlur(6))
+img = Image.alpha_composite(img, shadow)
 
-print(f"\n✅ Icon created: {OUTPUT_ICNS}")
-print(f"   Size: {os.path.getsize(OUTPUT_ICNS)} bytes")
+# Bubble body
+bubble = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+bd = ImageDraw.Draw(bubble)
+bd.ellipse([bx - br, by - br, bx + br, by + br], fill=(30, 215, 96, 255))
+img = Image.alpha_composite(img, bubble)
+
+# --- Chat mark inside bubble ---
+mark = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+md = ImageDraw.Draw(mark)
+md.ellipse([bx - 20, by - 6 - 13, bx + 20, by - 6 + 13],
+           fill=(255, 255, 255, int(255 * 0.9)))
+md.polygon([(bx - 8, by + 6), (bx - 14, by + 22), (bx - 4, by + 10)],
+           fill=(255, 255, 255, int(255 * 0.9)))
+img = Image.alpha_composite(img, mark)
+
+# --- Interaction spark ---
+sx, sy = int(S * 282 / 512), int(S * 288 / 512)
+spark = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+spd = ImageDraw.Draw(spark)
+spd.ellipse([sx - 5, sy - 5, sx + 5, sy + 5],
+            fill=(255, 255, 255, int(255 * 0.45)))
+img = Image.alpha_composite(img, spark)
+
+# Save
+out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                   'assets', 'icon_1024.png')
+img.save(out, 'PNG')
+print(f'  ✓ icon_1024.png ({img.mode}, {S}x{S})', flush=True)

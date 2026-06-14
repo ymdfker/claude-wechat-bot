@@ -9,10 +9,16 @@ PNG_1024="$ASSETS_DIR/icon_1024.png"
 
 echo "🎨 Generating macOS icon..."
 
-# Step 1: Render SVG → 1024px PNG
-echo "  → Rendering SVG..."
-qlmanage -t -s 1024 -o "$ASSETS_DIR" "$SVG" &>/dev/null
-[ -f "$ASSETS_DIR/icon.svg.png" ] && mv "$ASSETS_DIR/icon.svg.png" "$PNG_1024"
+# Step 1: Generate 1024px PNG with rounded corners + transparency
+echo "  → Generating 1024px PNG..."
+python3 "$SCRIPT_DIR/generate-icon.py" 2>/dev/null
+
+if [ ! -f "$PNG_1024" ]; then
+  # Fallback: qlmanage (loses transparency, but better than nothing)
+  echo "  → Python failed, falling back to qlmanage..."
+  qlmanage -t -s 1024 -o "$ASSETS_DIR" "$SVG" &>/dev/null
+  [ -f "$ASSETS_DIR/icon.svg.png" ] && mv "$ASSETS_DIR/icon.svg.png" "$PNG_1024"
+fi
 
 if [ ! -f "$PNG_1024" ]; then
   echo "  ✗ Cannot render SVG."
