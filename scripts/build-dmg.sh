@@ -71,10 +71,14 @@ NODE="$DIR/MacOS/node"
 PROJ="$DIR/Resources/project"
 cd "$PROJ" || exit 1
 
-# Point sql.js to the bundled WASM
 export SQL_JS_WASM_PATH="$DIR/Resources/sql-wasm.wasm"
 
-exec "$NODE" dist/index.js
+# Fork node process to background so the launcher exits immediately.
+# This stops the Dock icon from bouncing after the initial launch.
+nohup "$NODE" dist/index.js > /tmp/claude-wechat-bot.log 2>&1 &
+disown
+
+# Brief initial bounce only — launcher exits now
 EOF
 chmod +x "$APP_BUNDLE/Contents/MacOS/launcher.sh"
 
