@@ -1,51 +1,49 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <radialGradient id="claude" cx="0.4" cy="0.35" r="0.7">
-      <stop offset="0%" stop-color="#ffaa55"/>
-      <stop offset="55%" stop-color="#f97316"/>
-      <stop offset="100%" stop-color="#c2410c"/>
+    <radialGradient id="sphere" cx="0.35" cy="0.3" r="0.7">
+      <stop offset="0%" stop-color="#ffcc88"/>
+      <stop offset="18%" stop-color="#ff9944"/>
+      <stop offset="50%" stop-color="#f06520"/>
+      <stop offset="100%" stop-color="#b83010"/>
     </radialGradient>
-    <radialGradient id="wechat" cx="0.35" cy="0.3" r="0.65">
-      <stop offset="0%" stop-color="#3edb74"/>
-      <stop offset="100%" stop-color="#0e9e3e"/>
+    <radialGradient id="bubble" cx="0.3" cy="0.25" r="0.7">
+      <stop offset="0%" stop-color="#55ee88"/>
+      <stop offset="35%" stop-color="#1ed760"/>
+      <stop offset="100%" stop-color="#0a8f3a"/>
     </radialGradient>
     <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
-      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.03"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.06"/>
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="42%" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.10"/>
     </linearGradient>
-    <filter id="shadow">
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.2"/>
+    <filter id="bs">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0a5a20" flood-opacity="0.25"/>
     </filter>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="512" height="512" rx="112" ry="112"/>
+    </clipPath>
   </defs>
 
-  <!-- Claude orange fills ENTIRE canvas — no border, no gap -->
-  <rect x="0" y="0" width="512" height="512" fill="url(#claude)"/>
-
-  <!-- Subtle large star watermark -->
-  <g transform="translate(256,256)" opacity="0.06">
-    <path d="M0,-220 L28,-83 L170,-83 L45,28 L90,178 L0,86 L-90,178 L-45,28 L-170,-83 L-28,-83 Z" fill="#fff"/>
-  </g>
-
-  <!-- Glass overlay -->
-  <rect x="0" y="0" width="512" height="512" fill="url(#glass)"/>
-
-  <!-- WeChat bubble centered -->
-  <g filter="url(#shadow)">
-    <rect x="120" y="118" width="272" height="276" rx="48" ry="48" fill="url(#wechat)"/>
-  </g>
-
-  <!-- Bubble tail -->
-  <path d="M 168 394 L 140 460 L 198 402 Q 180 392 168 394 Z" fill="#0e9e3e"/>
-
-  <!-- Chat content inside bubble -->
-  <g transform="translate(256,248)">
-    <!-- Claude mini star -->
-    <circle cx="0" cy="-42" r="26" fill="#f97316"/>
-    <path d="M0,-54 L5,-40 L19,-40 L7,-32 L12,-18 L0,-24 L-12,-18 L-7,-32 L-19,-40 L-5,-40 Z"
-          fill="#ffffff" transform="scale(0.65)"/>
-    <!-- Chat bars -->
-    <rect x="-52" y="10" width="104" height="10" rx="5" fill="#ffffff" opacity="0.75"/>
-    <rect x="-36" y="28" width="72" height="10" rx="5" fill="#ffffff" opacity="0.45"/>
+  <!-- All content clipped to squircle — corners are transparent -->
+  <g clip-path="url(#squircle)">
+    <!-- Claude orange sphere -->
+    <rect x="0" y="0" width="512" height="512" fill="url(#sphere)"/>
+    <!-- Glass overlay -->
+    <rect x="0" y="0" width="512" height="512" fill="url(#glass)"/>
+    <!-- Claude white star -->
+    <g transform="translate(256,224)">
+      <path d="M0,-58 L14,-20 L54,-20 L22,10 L35,48 L0,26 L-35,48 L-22,10 L-54,-20 L-14,-20 Z" fill="#ffffff" opacity="0.88"/>
+    </g>
+    <!-- WeChat green bubble -->
+    <g transform="translate(314,314)" filter="url(#bs)">
+      <circle cx="0" cy="0" r="70" fill="url(#bubble)"/>
+    </g>
+    <!-- Chat mark -->
+    <g transform="translate(314,314)">
+      <ellipse cx="0" cy="-6" rx="20" ry="13" fill="#ffffff" opacity="0.9"/>
+      <path d="M-8,6 L-14,22 L-4,10 Q-2,8 0,8 L-8,6 Z" fill="#ffffff" opacity="0.9"/>
+    </g>
+    <!-- Interaction spark -->
+    <circle cx="282" cy="288" r="5" fill="#ffffff" opacity="0.45"/>
   </g>
 </svg>
