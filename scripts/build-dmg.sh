@@ -63,6 +63,15 @@ if [ -f "$SQL_WASM" ]; then
   cp "$SQL_WASM" "$APP_BUNDLE/Contents/Resources/"
 fi
 
+# ---- Compile menu bar helper (Swift → binary) ----
+echo "  → Compiling menu bar helper..."
+if command -v swiftc &>/dev/null && [ -f "$PROJECT_DIR/scripts/menubar.swift" ]; then
+  swiftc -O "$PROJECT_DIR/scripts/menubar.swift" -o "$APP_BUNDLE/Contents/MacOS/menubar"
+  echo "    ✓ menubar compiled"
+else
+  echo "    ⚠ swiftc not available, skipping menu bar helper"
+fi
+
 # ---- Launcher script ----
 cat > "$APP_BUNDLE/Contents/MacOS/launcher.sh" << 'EOF'
 #!/bin/bash
@@ -84,9 +93,15 @@ if [ -f "$LOCK" ]; then
 fi
 
 # Fork node process to background so the launcher exits immediately.
-# This stops the Dock icon from bouncing after the initial launch.
 nohup "$NODE" dist/index.js > /tmp/claude-wechat-bot.log 2>&1 &
+BOT_PID=$!
 disown
+
+# Start menu bar helper (shows 🤖 icon in menu bar, can kill bot)
+if [ -f "$DIR/MacOS/menubar" ]; then
+  nohup "$DIR/MacOS/menubar" "$BOT_PID" > /dev/null 2>&1 &
+  disown
+fi
 
 # Brief initial bounce only — launcher exits now
 EOF

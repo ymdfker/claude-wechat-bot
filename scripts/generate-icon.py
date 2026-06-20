@@ -39,7 +39,7 @@ bubble_layer = Image.new('RGBA',(S,S),(0,0,0,0))
 bd = ImageDraw.Draw(bubble_layer)
 
 # Big bubble (center-left)
-bx1, by1 = int(S * 470/512), int(S * 210/512)
+bx1, by1 = int(S * 210/512), int(S * 210/512)
 brx1, bry1 = int(S * 180/512), int(S * 120/512)
 bd.ellipse([bx1-brx1,by1-bry1,bx1+brx1,by1+bry1], fill=(255,255,255,int(255*0.88)))
 bd.polygon([
@@ -49,7 +49,7 @@ bd.polygon([
 ], fill=(255,255,255,int(255*0.88)))
 
 # Small bubble (center-right, overlapping)
-bx2, by2 = int(S * 590/512), int(S * 330/512)
+bx2, by2 = int(S * 340/512), int(S * 330/512)
 brx2, bry2 = int(S * 105/512), int(S * 70/512)
 bd.ellipse([bx2-brx2,by2-bry2,bx2+brx2,by2+bry2], fill=(255,255,255,int(255*0.85)))
 bd.polygon([
