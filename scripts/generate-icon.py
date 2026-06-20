@@ -1,4 +1,4 @@
-"""macOS icon: WeChat green base + chat bubbles + Claude star robot."""
+"""WeChat green base + centered chat bubbles + Claude star robot."""
 from PIL import Image, ImageDraw, ImageFilter
 import math, os
 
@@ -34,39 +34,38 @@ for y in range(S):
         _,_,_,a=img.getpixel((x,y))
         if a>0: r,g,b,_=img.getpixel((x,y)); img.putpixel((x,y),(min(255,r+alpha),min(255,g+alpha),min(255,b+alpha),255))
 
-# Layer: draw white chat bubbles (two, overlapping)
+# Two chat bubbles — CENTERED composition
 bubble_layer = Image.new('RGBA',(S,S),(0,0,0,0))
 bd = ImageDraw.Draw(bubble_layer)
 
-# Big bubble (left, representing WeChat conversation)
-bx1,by1 = int(S*340/512), int(S*210/512)
-brx1,bry1 = int(S*195/512), int(S*130/512)
+# Big bubble (center-left)
+bx1, by1 = int(S * 470/512), int(S * 210/512)
+brx1, bry1 = int(S * 180/512), int(S * 120/512)
 bd.ellipse([bx1-brx1,by1-bry1,bx1+brx1,by1+bry1], fill=(255,255,255,int(255*0.88)))
 bd.polygon([
-    (bx1+int(brx1*0.6),by1+int(bry1*0.85)),
-    (bx1+int(brx1*1.15),by1+int(bry1*1.2)),
-    (bx1+int(brx1*0.5),by1+int(bry1*0.92)),
+    (bx1+int(brx1*0.5), by1+int(bry1*0.82)),
+    (bx1+int(brx1*1.0), by1+int(bry1*1.15)),
+    (bx1+int(brx1*0.4), by1+int(bry1*0.9)),
 ], fill=(255,255,255,int(255*0.88)))
 
-# Small bubble (right, lower) — this is the Claude robot
-bx2,by2 = int(S*490/512), int(S*340/512)
-brx2,bry2 = int(S*105/512), int(S*70/512)
+# Small bubble (center-right, overlapping)
+bx2, by2 = int(S * 590/512), int(S * 330/512)
+brx2, bry2 = int(S * 105/512), int(S * 70/512)
 bd.ellipse([bx2-brx2,by2-bry2,bx2+brx2,by2+bry2], fill=(255,255,255,int(255*0.85)))
 bd.polygon([
-    (bx2-int(brx2*0.55),by2+int(bry2*0.85)),
-    (bx2-int(brx2*1.0),by2+int(bry2*1.25)),
-    (bx2-int(brx2*0.5),by2+int(bry2*0.9)),
+    (bx2-int(brx2*0.5), by2+int(bry2*0.82)),
+    (bx2-int(brx2*0.9), by2+int(bry2*1.2)),
+    (bx2-int(brx2*0.42), by2+int(bry2*0.88)),
 ], fill=(255,255,255,int(255*0.85)))
 
 img = Image.alpha_composite(img, bubble_layer)
 
-# Claude orange robot circle inside the small bubble
-cx,cy = bx2, by2-int(bry2*0.05)
+# Claude orange robot circle inside small bubble (centered in small bubble)
+cx, cy = bx2, by2 - int(bry2*0.05)
 cr = int(min(brx2,bry2)*0.6)
 robot = Image.new('RGBA',(S,S),(0,0,0,0))
 rd = ImageDraw.Draw(robot)
 rd.ellipse([cx-cr,cy-cr,cx+cr,cy+cr], fill=(249,115,22,255))
-# Star inside
 sr = int(cr*0.55)
 pts=[]
 for i in range(10):
@@ -76,7 +75,13 @@ for i in range(10):
 rd.polygon(pts, fill=(255,255,255,int(255*0.9)))
 img = Image.alpha_composite(img, robot)
 
-# Save
+# Small interaction dot between the two bubbles
+ix, iy = int(S * 482/512), int(S * 285/512)
+dot = Image.new('RGBA',(S,S),(0,0,0,0))
+dd = ImageDraw.Draw(dot)
+dd.ellipse([ix-4,iy-4,ix+4,iy+4], fill=(255,255,255,int(255*0.35)))
+img = Image.alpha_composite(img, dot)
+
 out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets','icon_1024.png')
 img.save(out,'PNG')
 print(f'  ✓ icon_1024.png', flush=True)
