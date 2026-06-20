@@ -1,112 +1,82 @@
-"""WeChat-style icon: green base + large chat bubble + Claude star replacing small bubble."""
+"""macOS icon: WeChat green base + chat bubbles + Claude star robot."""
 from PIL import Image, ImageDraw, ImageFilter
 import math, os
 
 S = 1024
-R = S * 120 // 512  # squircle corner radius
+R = S * 110 // 512
 
-img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+img = Image.new('RGBA', (S, S), (0,0,0,0))
 
-def in_rounded_rect(x, y):
-    if x < R and y < R and (x-R)**2 + (y-R)**2 > R**2: return False
-    if x >= S-R and y < R and (x-(S-R))**2 + (y-R)**2 > R**2: return False
-    if x < R and y >= S-R and (x-R)**2 + (y-(S-R))**2 > R**2: return False
-    if x >= S-R and y >= S-R and (x-(S-R))**2 + (y-(S-R))**2 > R**2: return False
+def in_rect(x,y):
+    if x<R and y<R and (x-R)**2+(y-R)**2>R**2: return False
+    if x>=S-R and y<R and (x-(S-R))**2+(y-R)**2>R**2: return False
+    if x<R and y>=S-R and (x-R)**2+(y-(S-R))**2>R**2: return False
+    if x>=S-R and y>=S-R and (x-(S-R))**2+(y-(S-R))**2>R**2: return False
     return True
 
-# ====== WeChat Green Background ======
-# Reference green: RGB(60, 176, 52)
-BASE_R, BASE_G, BASE_B = 60, 176, 52
+# WeChat green gradient bg
 for y in range(S):
     for x in range(S):
-        if not in_rounded_rect(x, y): continue
-        dx = (x - S*0.4) / (S*0.7)
-        dy = (y - S*0.35) / (S*0.7)
-        d = min(math.sqrt(dx*dx + dy*dy), 1.0)
-        r = max(int(BASE_R + 40*(1-d) - 20*d), 20)
-        g = max(int(BASE_G + 40*(1-d) - 60*d), 120)
-        b = max(int(BASE_B + 40*(1-d) - 30*d), 20)
-        img.putpixel((x, y), (r, g, b, 255))
+        if not in_rect(x,y): continue
+        dx=(x-S*0.38)/(S*0.65); dy=(y-S*0.33)/(S*0.65)
+        d=min(math.sqrt(dx*dx+dy*dy),1.0)
+        r=max(int(45+55*(1-d)-15*d),20)
+        g=max(int(190+30*(1-d)-50*d),130)
+        b=max(int(60+30*(1-d)-20*d),25)
+        img.putpixel((x,y),(r,g,b,255))
 
 # Glass
 for y in range(S):
-    t = y / S
-    glass = 0.15*(1-t) + 0.03*(1-abs(t-0.4)*2.5) - 0.06*t
-    alpha = max(0, int(glass*255))
-    if alpha == 0: continue
+    t=y/S; glass=0.16*(1-t)+0.03*(1-abs(t-0.4)*2.5)-0.06*t
+    alpha=max(0,int(glass*255))
+    if alpha==0: continue
     for x in range(S):
-        _, _, _, a = img.getpixel((x, y))
-        if a > 0:
-            r, g, b, _ = img.getpixel((x, y))
-            img.putpixel((x, y), (min(255, r+alpha), min(255, g+alpha), min(255, b+alpha), 255))
+        _,_,_,a=img.getpixel((x,y))
+        if a>0: r,g,b,_=img.getpixel((x,y)); img.putpixel((x,y),(min(255,r+alpha),min(255,g+alpha),min(255,b+alpha),255))
 
-# ====== Large White Chat Bubble (upper-left area) ======
-# WeChat icon has two bubbles: one large (left), one small (right, lower)
-# We keep the large one, replace small one with Claude star
-bx = int(S * 370 / 512)
-by = int(S * 210 / 512)
-brx = int(S * 210 / 512)
-bry = int(S * 140 / 512)
+# Layer: draw white chat bubbles (two, overlapping)
+bubble_layer = Image.new('RGBA',(S,S),(0,0,0,0))
+bd = ImageDraw.Draw(bubble_layer)
 
-bubble = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-bd = ImageDraw.Draw(bubble)
-# Main ellipse body
-bd.ellipse([bx - brx, by - bry, bx + brx, by + bry],
-           fill=(255, 255, 255, int(255 * 0.9)))
-# Tail (lower-right direction)
+# Big bubble (left, representing WeChat conversation)
+bx1,by1 = int(S*340/512), int(S*210/512)
+brx1,bry1 = int(S*195/512), int(S*130/512)
+bd.ellipse([bx1-brx1,by1-bry1,bx1+brx1,by1+bry1], fill=(255,255,255,int(255*0.88)))
 bd.polygon([
-    (bx + int(brx * 0.65), by + int(bry * 0.85)),
-    (bx + int(brx * 1.2), by + int(bry * 1.25)),
-    (bx + int(brx * 0.55), by + int(bry * 0.9)),
-], fill=(255, 255, 255, int(255 * 0.9)))
-# Inner highlight
-bd.ellipse([bx - int(brx * 0.3), by - int(bry * 0.1),
-            bx + int(brx * 0.3), by + int(bry * 0.1)],
-           fill=(60, 176, 52, int(255 * 0.25)))
-img = Image.alpha_composite(img, bubble)
+    (bx1+int(brx1*0.6),by1+int(bry1*0.85)),
+    (bx1+int(brx1*1.15),by1+int(bry1*1.2)),
+    (bx1+int(brx1*0.5),by1+int(bry1*0.92)),
+], fill=(255,255,255,int(255*0.88)))
 
-# ====== Claude Code (replaces smaller bubble, lower-right) ======
-cx2 = int(S * 320 / 512)
-cy2 = int(S * 360 / 512)
-cr2 = int(S * 95 / 512)
+# Small bubble (right, lower) — this is the Claude robot
+bx2,by2 = int(S*490/512), int(S*340/512)
+brx2,bry2 = int(S*105/512), int(S*70/512)
+bd.ellipse([bx2-brx2,by2-bry2,bx2+brx2,by2+bry2], fill=(255,255,255,int(255*0.85)))
+bd.polygon([
+    (bx2-int(brx2*0.55),by2+int(bry2*0.85)),
+    (bx2-int(brx2*1.0),by2+int(bry2*1.25)),
+    (bx2-int(brx2*0.5),by2+int(bry2*0.9)),
+], fill=(255,255,255,int(255*0.85)))
 
-# Shadow for Claude circle
-sd_img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-sd_draw = ImageDraw.Draw(sd_img)
-sd_draw.ellipse([cx2 - cr2 + 5, cy2 - cr2 + 5, cx2 + cr2 + 5, cy2 + cr2 + 5],
-                fill=(40, 100, 30, 40))
-sd_img = sd_img.filter(ImageFilter.GaussianBlur(5))
-img = Image.alpha_composite(img, sd_img)
+img = Image.alpha_composite(img, bubble_layer)
 
-# Orange circle with gradient
-cc_img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-for y in range(cy2 - cr2, cy2 + cr2):
-    for x in range(cx2 - cr2, cx2 + cr2):
-        dx2 = (x - cx2) / cr2
-        dy2 = (y - cy2) / cr2
-        dist2 = dx2*dx2 + dy2*dy2
-        if dist2 <= 1:
-            # Claude orange: #F97316 base
-            rr = int(249 - 30 * dist2 - 15 * max(0, dy2))
-            gg = int(115 - 50 * dist2 - 20 * max(0, dy2))
-            bb = int(22 - 10 * dist2)
-            cc_img.putpixel((x, y), (max(rr, 200), max(gg, 40), max(bb, 10), 255))
-img = Image.alpha_composite(img, cc_img)
-
-# White star inside
-star_r = int(cr2 * 0.58)
-star_img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-star_draw = ImageDraw.Draw(star_img)
-pts = []
+# Claude orange robot circle inside the small bubble
+cx,cy = bx2, by2-int(bry2*0.05)
+cr = int(min(brx2,bry2)*0.6)
+robot = Image.new('RGBA',(S,S),(0,0,0,0))
+rd = ImageDraw.Draw(robot)
+rd.ellipse([cx-cr,cy-cr,cx+cr,cy+cr], fill=(249,115,22,255))
+# Star inside
+sr = int(cr*0.55)
+pts=[]
 for i in range(10):
-    angle = math.pi/2 + i * math.pi/5
-    r = star_r if i % 2 == 0 else star_r * 0.38
-    pts.append((cx2 + r*math.cos(angle), cy2 - r*math.sin(angle)))
-star_draw.polygon(pts, fill=(255, 255, 255, int(255 * 0.9)))
-img = Image.alpha_composite(img, star_img)
+    a=math.pi/2+i*math.pi/5
+    r=sr if i%2==0 else sr*0.38
+    pts.append((cx+r*math.cos(a),cy-r*math.sin(a)))
+rd.polygon(pts, fill=(255,255,255,int(255*0.9)))
+img = Image.alpha_composite(img, robot)
 
 # Save
-out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   'assets', 'icon_1024.png')
-img.save(out, 'PNG')
+out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets','icon_1024.png')
+img.save(out,'PNG')
 print(f'  ✓ icon_1024.png', flush=True)
